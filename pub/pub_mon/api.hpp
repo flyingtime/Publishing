@@ -13,11 +13,18 @@
 
 using namespace std;
 
+#define RUNCMD_RV_CREATE_PROCESS   -100
+#define RUNCMD_RV_GET_EXIT_CODE    -101
+#define RUNCMD_RV_WAIT_ABANDONED   -200
+#define RUNCMD_RV_WAIT_TIMEOUT     -201
+#define RUNCMD_RV_WAIT_FAILED      -202
+#define RUNCMD_RV_WAIT_UNCAUGHT    -203
+
 class OSIAPI
 {
 public:
         OSIAPI() = delete;
-        static int RunCommand(const char *pCommand);
+        static int RunCommand(const char *pCommand, unsigned int nSeconds = 0);
         static void MakeSleep(unsigned int nSeconds);
 
         // threads

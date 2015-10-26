@@ -6,10 +6,12 @@
 
 Policy ProcEntry::m_policy[] = 
 { 
-        { POLICY_RESPAWN,          "respawn=" },
-        { POLICY_RESPAWN_INTERVAL, "interval="},
+        { POLICY_RESPAWN,          "res=" },
+        { POLICY_RESPAWN_INTERVAL, "res_int="},
         { POLICY_RESPAWN_LIMITS,   "max_retry="},
-        { POLICY_RESPAWN_FORCE,    "force="}
+        { POLICY_RESPAWN_FORCE,    "force="},
+        { POLICY_TIMEOUT,          "tm="},
+        { POLICY_TIMEOUT_INTERVAL, "tm_int="}
 };
 
 ostream& operator<< (ostream &_os, const ProcEntry& _entry)
@@ -92,9 +94,38 @@ void ProcEntry::Print()
 
 int ProcEntry::Run()
 {
-        int nRetVal = OSIAPI::RunCommand(m_command.c_str());
+        unsigned int nTimeout = 0;
+        unsigned int nTimeoutInterval = 0;
+
+        // set timeout to 0 if no timeout policy
+        if (CheckTimeout(nTimeout, nTimeoutInterval) == false) {
+                nTimeout = 0;
+        }
+
+        int nRetVal = OSIAPI::RunCommand(m_command.c_str(), nTimeout);
         cout << "Process [" << m_command << "] terminated with exit code = " << nRetVal << endl;
         return nRetVal;
+}
+
+bool ProcEntry::CheckTimeout(unsigned int& _nTimeout, unsigned int& _nTimeoutInterval)
+{
+        bool bIsValidTimeoutPolicy = false;
+        _nTimeoutInterval = TIMEOUT_DEFAULT_SLEEP_INTERVAL; // default value for timeout case
+
+        for (auto it = m_policyTable.begin(); it != m_policyTable.end(); it++) {
+                switch ((*it).second) {
+                case POLICY_TIMEOUT:
+                        _nTimeout = static_cast<unsigned int>((*it).first);
+                        bIsValidTimeoutPolicy = true;
+                        break;
+                case POLICY_TIMEOUT_INTERVAL:
+                        _nTimeoutInterval = static_cast<unsigned int>((*it).first);
+                        break;
+                default:
+                        break;
+                }
+        }
+        return bIsValidTimeoutPolicy;
 }
 
 bool ProcEntry::CheckRespawn(int _nExitCode, unsigned int _nRetry, unsigned int& _nInterval)
@@ -247,10 +278,17 @@ void PubMonitor::MonitorThread(void *_pParam)
 {
         ProcEntry *pEntry;
         int nExitCode;
-        unsigned int nInterval = 0, nRetry = 0;
+        unsigned int nInterval = 0, nRetry = 0, nTimeout = 0, nTimeoutReached = 0;
         while (true) {
                 pEntry = (ProcEntry *)_pParam;
                 nExitCode = pEntry->Run();
+                if (nExitCode == RUNCMD_RV_WAIT_TIMEOUT) {
+                        nTimeoutReached++;
+                        pEntry->CheckTimeout(nTimeout, nInterval);
+                        cout << "timeout #" << nTimeoutReached << ", sleep " << nInterval << " seconds ..." << endl;
+                        OSIAPI::MakeSleep(nInterval);
+                        continue;
+                }
                 if (pEntry->CheckRespawn(nExitCode, nRetry, nInterval)) {
                         nRetry++;
                         cout << "retry #" << nRetry << ", sleep " << nInterval << " seconds ..." << endl;

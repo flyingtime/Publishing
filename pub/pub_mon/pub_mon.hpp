@@ -13,7 +13,9 @@ typedef enum _PType {
         POLICY_RESPAWN,
         POLICY_RESPAWN_INTERVAL,
         POLICY_RESPAWN_LIMITS,
-        POLICY_RESPAWN_FORCE
+        POLICY_RESPAWN_FORCE,
+        POLICY_TIMEOUT,
+        POLICY_TIMEOUT_INTERVAL
 } PType;
 
 typedef struct _Policy
@@ -22,7 +24,8 @@ typedef struct _Policy
         const char *pOptionName;
 } Policy;
 
-#define RESPAWN_DEFAULT_INTERVAL 5 // seconds
+#define RESPAWN_DEFAULT_INTERVAL        5 // seconds
+#define TIMEOUT_DEFAULT_SLEEP_INTERVAL  1 // seconds
 class ProcEntry
 {
 public:
@@ -32,6 +35,7 @@ public:
         void Print();
         int Run();
         bool CheckRespawn(int nExitCode, unsigned int nRetry, unsigned int& nInterval);
+        bool CheckTimeout(unsigned int& nTimeout, unsigned int& nTimeoutInterval);
         friend ostream& operator<< (ostream &os, const ProcEntry& entry);
 private:
         // policy strings
