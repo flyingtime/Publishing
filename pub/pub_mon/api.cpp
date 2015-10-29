@@ -3,7 +3,7 @@
 #if defined(__WIN32__) || defined(_WIN32)
         vector<HANDLE> OSIAPI::m_threads;
 #else
-        vector<int> OSIAPI::m_threads;
+        vector<pid_t> OSIAPI::m_threads;
 #endif
 
 
@@ -69,7 +69,7 @@ int OSIAPI::RunCommand(const char *_pCommand, unsigned int _nSeconds)
         return nRetVal;
 }
 
-int OSIAPI::RunThread(void (*_pFunction)(void*), void *_pParameter)
+int OSIAPI::RunThread(OSIAPI_THREAD_RETURN_TYPE (*_pFunction)(void*), void *_pParameter)
 {
         HANDLE hThread;
         DWORD dwThreadId;
@@ -92,26 +92,113 @@ int OSIAPI::WaitForAllThreads()
 
 #else
 
+struct ParamSet
+{
+        const char *pCommand;
+        void *pExitCode;
+};
+
+#define DELIMITER_CHAR ' '
+#define MAX_ARGUMENT_NUMBER 32
 int OSIAPI::RunCommand(const char *_pCommand, unsigned int _nSeconds)
 {
-        int nRetVal = system(_pCommand);
-        nRetVal >>= 8;
-        return nRetVal;
+        pid_t worker;
+        worker = fork();
+        if (worker == 0) {
+                // handle delimiters and convert to the same character
+                string command = _pCommand;
+                for (unsigned int i = 0; i < command.size(); i++) {
+                        if (command[i] == '\t' || command[i] == '\n' || command[i] == '\r') {
+                                command[i] = DELIMITER_CHAR;
+                        }
+                }
+
+                // get each command argument in the vector
+                stringstream ss(command);
+                vector<string> argsContainer;
+                string arg;
+                while (getline(ss, arg, DELIMITER_CHAR)) {
+                        argsContainer.push_back(arg);
+                }
+
+                // check arguments number
+                if (argsContainer.size() > MAX_ARGUMENT_NUMBER) {
+                        cout << "Error: command: " << _pCommand << " has too many arguments" << endl;
+                        exit(RUNCMD_RV_CREATE_PROCESS);
+                }
+
+                // vector to array
+                char *args[argsContainer.size() + 1];
+                args[argsContainer.size()] = nullptr;
+                int i = 0;
+                for (auto it = argsContainer.begin(); it != argsContainer.end(); it++) {
+                        args[i] = &(*it)[0];
+                        i++;
+                }
+
+                // execute command
+                int nStatus = execv(args[0], args);
+                cout << "Error: " << "execv failed with: " << nStatus << " errno: " << strerror(errno) << endl;
+                exit(nStatus);
+        } else {
+                int nExit;
+                if (_nSeconds == 0) {
+                        waitpid(worker, &nExit, 0);
+                } else {
+                        unsigned int nNow = 0;
+                        pid_t waitPid;
+                        while (1) {
+                                waitPid = waitpid(worker, &nExit, WNOHANG);
+                                if (waitPid == 0) {
+                                        if (nNow >= _nSeconds) {
+                                                kill(worker, SIGKILL);
+                                                return RUNCMD_RV_WAIT_TIMEOUT;
+                                        }
+                                } else if (waitPid == worker) {
+                                        break;
+                                } else if (waitPid == -1) {
+                                        return RUNCMD_RV_WAIT_FAILED;
+                                } else {
+                                        return RUNCMD_RV_WAIT_UNCAUGHT;
+                                }
+                                nNow++;
+                                sleep(1);
+                        }
+                }
+
+                if(WIFEXITED(nExit)) {
+                        return WEXITSTATUS(nExit);
+                }
+                if(WIFSIGNALED(nExit)) {
+                        cout << "Notice: process " << worker << " killed: signal " << WTERMSIG(nExit) << endl;
+                        if (WCOREDUMP(nExit)) {
+                                cout << "Notice: core dumped" << endl;
+                        }
+                        return 128 + WTERMSIG(nExit);
+                }
+        }
+        return 0;
 }
 
-int OSIAPI::RunThread(void (*_pFunction)(void*), void *_pParameter)
+int OSIAPI::RunThread(OSIAPI_THREAD_RETURN_TYPE (*_pFunction)(void*), void *_pParameter)
 {
-        std::cout << "Notice: posix threading is not supported now" << endl;
-        exit(1);
-
+        pid_t nPid = fork();
+        if (nPid == 0) {
+                _pFunction(_pParameter);
+                exit(0);
+        } else {
+                OSIAPI::m_threads.push_back(nPid);
+        }
         return 0;
 }
 
 int OSIAPI::WaitForAllThreads()
 {
-        std::cout << "Notice: posix waiting is not supported now" << endl;
-        exit(1);
-
+        int nStatus;
+        for (auto it = OSIAPI::m_threads.begin(); it != OSIAPI::m_threads.end();) {
+                waitpid(*it, &nStatus, 0);
+                OSIAPI::m_threads.erase(it);
+        }
         return 0;
 }
 #endif

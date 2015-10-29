@@ -33,7 +33,7 @@ public:
         void AddPolicy(int nExitCode, unsigned int nPolicyId);
         void AddPolicy(const char *pPolicy);
         void Print();
-        int Run();
+        int Run(unsigned int nTimeout = 0);
         bool CheckRespawn(int nExitCode, unsigned int nRetry, unsigned int& nInterval);
         bool CheckTimeout(unsigned int& nTimeout, unsigned int& nTimeoutInterval);
         friend ostream& operator<< (ostream &os, const ProcEntry& entry);
@@ -56,7 +56,7 @@ public:
 private:
         void AddEntry(ProcEntry *pEntry);
         bool IsValidLine(const char *pLine);
-        static void MonitorThread(void *pParam);
+        static OSIAPI_THREAD_RETURN_TYPE MonitorThread(void *pParam);
 
         string m_confPath;
         vector<ProcEntry *> m_procTable;

@@ -92,17 +92,9 @@ void ProcEntry::Print()
         });
 }
 
-int ProcEntry::Run()
+int ProcEntry::Run(unsigned int _nTimeout)
 {
-        unsigned int nTimeout = 0;
-        unsigned int nTimeoutInterval = 0;
-
-        // set timeout to 0 if no timeout policy
-        if (CheckTimeout(nTimeout, nTimeoutInterval) == false) {
-                nTimeout = 0;
-        }
-
-        int nRetVal = OSIAPI::RunCommand(m_command.c_str(), nTimeout);
+        int nRetVal = OSIAPI::RunCommand(m_command.c_str(), _nTimeout);
         cout << "Process [" << m_command << "] terminated with exit code = " << nRetVal << endl;
         return nRetVal;
 }
@@ -274,21 +266,28 @@ void PubMonitor::Run()
         OSIAPI::WaitForAllThreads();
 }
 
-void PubMonitor::MonitorThread(void *_pParam)
+OSIAPI_THREAD_RETURN_TYPE PubMonitor::MonitorThread(void *_pParam)
 {
         ProcEntry *pEntry;
         int nExitCode;
         unsigned int nInterval = 0, nRetry = 0, nTimeout = 0, nTimeoutReached = 0;
         while (true) {
                 pEntry = (ProcEntry *)_pParam;
-                nExitCode = pEntry->Run();
-                if (nExitCode == RUNCMD_RV_WAIT_TIMEOUT) {
-                        nTimeoutReached++;
-                        pEntry->CheckTimeout(nTimeout, nInterval);
-                        cout << "timeout #" << nTimeoutReached << ", sleep " << nInterval << " seconds ..." << endl;
-                        OSIAPI::MakeSleep(nInterval);
-                        continue;
+
+                // run command with timeout policy if needed
+                if (pEntry->CheckTimeout(nTimeout, nInterval) == true) {
+                        nExitCode = pEntry->Run(nTimeout);
+                        if (nExitCode == RUNCMD_RV_WAIT_TIMEOUT) {
+                                nTimeoutReached++;
+                                cout << "timeout #" << nTimeoutReached << ", sleep " << nInterval << " seconds ..." << endl;
+                                OSIAPI::MakeSleep(nInterval);
+                                continue;
+                        }
+                } else {
+                        nExitCode = pEntry->Run();
                 }
+
+                // check respawn policy
                 if (pEntry->CheckRespawn(nExitCode, nRetry, nInterval)) {
                         nRetry++;
                         cout << "retry #" << nRetry << ", sleep " << nInterval << " seconds ..." << endl;
@@ -299,4 +298,5 @@ void PubMonitor::MonitorThread(void *_pParam)
                         break;
                 }
         }
+        return OSIAPI_THREAD_RETURN_OK;
 }
