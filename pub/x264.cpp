@@ -11,7 +11,7 @@ unsigned int Util264::Ue(char *_pBuf, unsigned int _nLen, unsigned int &_nStartB
                 nZeroNum++;
                 _nStartBit++;
         }
-	_nStartBit ++;
+        _nStartBit ++;
 
         uint32_t dwRet = 0;
         for (unsigned int i = 0; i < nZeroNum; i++) {
@@ -30,9 +30,9 @@ int Util264::Se(char *_pBuf, unsigned int _nLen, unsigned int &_nStartBit)
         double k = UeVal;
         int nValue = ceil(k / 2);
         
-	if (UeVal % 2 == 0) {
+        if (UeVal % 2 == 0) {
                 nValue =- nValue;
-	}
+        }
         return nValue;
 }
 
@@ -41,7 +41,7 @@ uint32_t Util264::u(unsigned int _nBitCount, char * _pBuf, unsigned int &_nStart
 {
         uint32_t dwRet = 0;
         
-	for (unsigned int i = 0; i < _nBitCount; i++) {
+        for (unsigned int i = 0; i < _nBitCount; i++) {
                 dwRet <<= 1;
                 if (_pBuf[_nStartBit / 8] & (0x80 >> (_nStartBit % 8))) {
                         dwRet += 1;
@@ -51,68 +51,101 @@ uint32_t Util264::u(unsigned int _nBitCount, char * _pBuf, unsigned int &_nStart
         return dwRet;
 }
 
-bool Util264::h264_decode_sps(char * _pBuf,unsigned int _nLen,int &_width,int &_height)
+bool Util264::DecodeSps(char * _pBuf,unsigned int _nLen,int &_width,int &_height)
 {
-	unsigned int startBit = 0;
-	int forbiddenZeroBit = u(1, _pBuf, startBit);
-	int nalRefIdc = u(2, _pBuf, startBit);
-	int nalUnitType = u(5, _pBuf, startBit);
+        unsigned int startBit = 0;
+        int forbiddenZeroBit = u(1, _pBuf, startBit);
+        int nalRefIdc = u(2, _pBuf, startBit);
+        int nalUnitType = u(5, _pBuf, startBit);
 
-	if (nalUnitType == 0x7) {
-		int profileIdc = u(8, _pBuf, startBit);
-		int constraintSet0Flag = u(1, _pBuf, startBit);
-		int constraintSet1Flag = u(1, _pBuf, startBit);
-		int constraintSet2Flag = u(1, _pBuf, startBit);
-		int constraintSet3Flag = u(1, _pBuf, startBit);
-		int reservedZero4bits = u(4, _pBuf, startBit);
-		int levelIdc = u(8, _pBuf, startBit);
+        if (nalUnitType == 0x7) {
+                int profileIdc = u(8, _pBuf, startBit);
+                int constraintSet0Flag = u(1, _pBuf, startBit);
+                int constraintSet1Flag = u(1, _pBuf, startBit);
+                int constraintSet2Flag = u(1, _pBuf, startBit);
+                int constraintSet3Flag = u(1, _pBuf, startBit);
+                int reservedZero4bits = u(4, _pBuf, startBit);
+                int levelIdc = u(8, _pBuf, startBit);
 
-		int seqParamSetId = Ue(_pBuf, _nLen, startBit);
+                int seqParamSetId = Ue(_pBuf, _nLen, startBit);
 
-		if (profileIdc == 100 || profileIdc == 110 || profileIdc == 122 || profileIdc == 144) {
-			int chromaFormatIdc = Ue(_pBuf, _nLen, startBit);
-			if (chromaFormatIdc == 0x3) {
-				int residualColorTransformFlag = u(1, _pBuf, startBit);
-			}
-			int bitDepthLumaMinus8 = Ue(_pBuf, _nLen, startBit);
-			int bitDepthChromaMinus8 = Ue(_pBuf, _nLen, startBit);
-			int qpprimeYZeroTransformBypassFlag = u(1, _pBuf, startBit);
-			int seqScalingMatrixPresentFlag = u(1, _pBuf, startBit);
+                if (profileIdc == 100 || profileIdc == 110 || profileIdc == 122 || profileIdc == 144) {
+                        int chromaFormatIdc = Ue(_pBuf, _nLen, startBit);
+                        if (chromaFormatIdc == 0x3) {
+                                int residualColorTransformFlag = u(1, _pBuf, startBit);
+                        }
+                        int bitDepthLumaMinus8 = Ue(_pBuf, _nLen, startBit);
+                        int bitDepthChromaMinus8 = Ue(_pBuf, _nLen, startBit);
+                        int qpprimeYZeroTransformBypassFlag = u(1, _pBuf, startBit);
+                        int seqScalingMatrixPresentFlag = u(1, _pBuf, startBit);
 
-			int seqScalingListPresentFlag[8];
-			if (seqScalingMatrixPresentFlag) {
-				for (int i = 0; i < 8; i++) {
-					seqScalingListPresentFlag[i] = u(1, _pBuf, startBit);
-				}
-			}
-		}
-		int log2MaxFrameNumMinus4 = Ue(_pBuf, _nLen, startBit);
-		int picOrderCntType = Ue(_pBuf, _nLen, startBit);
-		if (picOrderCntType == 0) {
-			int log2MaxPicOrderCntLsbMinus4 = Ue(_pBuf, _nLen, startBit);
-		} else if (picOrderCntType == 1) {
-			int deltaPicOrderAlwaysZeroFlag = u(1, _pBuf, startBit);
-			int offsetForNonRefPic = Se(_pBuf, _nLen, startBit);
-			int offsetForTopToBottomField = Se(_pBuf, _nLen, startBit);
-			int numRefFramesInPicOrderCntCycle = Ue(_pBuf, _nLen, startBit);
-			
-			int *offsetForRefFrame = new int[numRefFramesInPicOrderCntCycle];
-			for (int i = 0; i < numRefFramesInPicOrderCntCycle; i++) {
-				offsetForRefFrame[i] = Se(_pBuf, _nLen, startBit);
-			}
-			delete[] offsetForRefFrame;
-		}
-		int numRefFrames = Ue(_pBuf, _nLen, startBit);
-		int gapsInFrameNumValueAllowedFlag = u(1, _pBuf, startBit);
-		int picWidthInMbsMinus1 = Ue(_pBuf, _nLen, startBit);
-		int picHeightInMapUnitsMinus1 = Ue(_pBuf, _nLen, startBit);
+                        int seqScalingListPresentFlag[8];
+                        if (seqScalingMatrixPresentFlag) {
+                                for (int i = 0; i < 8; i++) {
+                                        seqScalingListPresentFlag[i] = u(1, _pBuf, startBit);
+                                }
+                        }
+                }
+                int log2MaxFrameNumMinus4 = Ue(_pBuf, _nLen, startBit);
+                int picOrderCntType = Ue(_pBuf, _nLen, startBit);
+                if (picOrderCntType == 0) {
+                        int log2MaxPicOrderCntLsbMinus4 = Ue(_pBuf, _nLen, startBit);
+                } else if (picOrderCntType == 1) {
+                        int deltaPicOrderAlwaysZeroFlag = u(1, _pBuf, startBit);
+                        int offsetForNonRefPic = Se(_pBuf, _nLen, startBit);
+                        int offsetForTopToBottomField = Se(_pBuf, _nLen, startBit);
+                        int numRefFramesInPicOrderCntCycle = Ue(_pBuf, _nLen, startBit);
+                        
+                        int *offsetForRefFrame = new int[numRefFramesInPicOrderCntCycle];
+                        for (int i = 0; i < numRefFramesInPicOrderCntCycle; i++) {
+                                offsetForRefFrame[i] = Se(_pBuf, _nLen, startBit);
+                        }
+                        delete[] offsetForRefFrame;
+                }
+                int numRefFrames = Ue(_pBuf, _nLen, startBit);
+                int gapsInFrameNumValueAllowedFlag = u(1, _pBuf, startBit);
+                int picWidthInMbsMinus1 = Ue(_pBuf, _nLen, startBit);
+                int picHeightInMapUnitsMinus1 = Ue(_pBuf, _nLen, startBit);
 
-		_width = (picWidthInMbsMinus1 + 1) * 16;
-		_height = (picHeightInMapUnitsMinus1 + 1) * 16;
+                _width = (picWidthInMbsMinus1 + 1) * 16;
+                _height = (picHeightInMapUnitsMinus1 + 1) * 16;
 
-		return true;
-	} else {
-		return false;
-	}
-	return true;
+                return true;
+        } else {
+                return false;
+        }
+        return true;
+}
+
+int Util264::GetFrameType(const NalUnit *_pNalUnit)
+{
+        int nIPBType = FRAME_TYPE_UNKNOWN;
+        if (_pNalUnit->type == NAL_TYPE_SLICE || _pNalUnit->type == NAL_TYPE_SLICE_IDR) {
+                unsigned int nStartBit = 1 * 8;
+                unsigned int nBufferLength = _pNalUnit->size - 1;
+                // i_first_mb
+                Ue(_pNalUnit->data, nBufferLength, nStartBit);
+                int nFrameType = Ue(_pNalUnit->data, nBufferLength, nStartBit);
+                switch(nFrameType)
+                {
+                case 0: case 5: /* P */
+                        nIPBType = FRAME_TYPE_P;
+                        break;
+                case 1: case 6: /* B */
+                        nIPBType = FRAME_TYPE_B;
+                        break;
+                case 3: case 8: /* SP */
+                        nIPBType = FRAME_TYPE_P;
+                        break;
+                case 2: case 7: /* I */
+                        nIPBType = FRAME_TYPE_I;
+                        break;
+                case 4: case 9: /* SI */
+                        nIPBType = FRAME_TYPE_I;
+                        break;
+                default:
+                        nIPBType = FRAME_TYPE_UNKNOWN;
+                }
+        }
+        return nIPBType;
 }

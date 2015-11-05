@@ -14,19 +14,15 @@ LIB_SO=
 
 LIBRTMP=../rtmpdump/librtmp
 
-all: $(SOURCES) librtmp pilipub rtsppub link
-
-build: clean all
-
+basic_pub: $(SOURCES) librtmp $(BIN)
 clean:
 	-rm *.o *.a $(BIN) *~
-	cd ../rtmpdump/librtmp/ && make clean
-	cd pili_pub && make clean
-	cd rtsp_pub && make clean clean555
+
+# dependencies
 librtmp:
 	cd $(LIBRTMP) && make
 	cp $(LIBRTMP)/*.a .
-link:
+$(BIN): $(SOURCES)
 	@echo "LD " $(BIN) 
 	@$(LD) $(SOURCES) $(LIB_A) -o $(BIN) $(LDFLAGS)
 
@@ -39,6 +35,14 @@ indent:
 		do \
 			echo $$f; \
 	done
+
+# build sub projects
+all: $(SOURCES) basic_pub pilipub rtsppub
+build: clean_all all
+clean_all: clean
+	cd ../rtmpdump/librtmp/ && make clean
+	cd pili_pub && make clean
+	cd rtsp_pub && make clean clean555
 
 #########
 # subdir

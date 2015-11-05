@@ -9,18 +9,13 @@
 #include "rtmp_sys.h"
 #include "amf.h"
 
+#include "x264.hpp"
+
 #include <cstring>
 
 #define FILE_BUFFER_SIZE (1024 * 1024 * 15)
 #define DEFAULT_FPS 30
 #define FLV_CODECID_H264 7
-
-typedef struct _NalUnit
-{
-        int type;
-        int size;
-        char *data;
-} NalUnit;
 
 typedef struct _RtmpMetadata
 {

@@ -8,7 +8,6 @@
 #include <cstdio>
 
 #include "pub.hpp"
-#include "x264.hpp"
 
 using namespace std;
 
@@ -228,7 +227,7 @@ bool RtmpStream::SendH264File(const char *_pFileName)
         memcpy(meta.pps, nalu.data, nalu.size);
 
         int width, height;
-        Util264::h264_decode_sps(meta.sps, meta.nSpsLen, width, height);
+        Util264::DecodeSps(meta.sps, meta.nSpsLen, width, height);
         meta.nWidth = width;
         meta.nHeight = height;
         // TODO fps data from 264 stream
@@ -300,8 +299,15 @@ bool RtmpStream::ReadOneNaluFromBuf(NalUnit &nalu)
                 nalu.type = m_pFileBuf[nThisNalu] & 0x01f;
                 nalu.data = &m_pFileBuf[nThisNalu];
 
-                cout << "[debug] pos=" << m_nCurPos << " nalu.type="
-                     << nalu.type << " nalu.size=" << nalu.size << endl;
+                char chFrameType;
+                switch (Util264::GetFrameType(&nalu)){
+                case FRAME_TYPE_UNKNOWN: chFrameType = '-'; break;
+                case FRAME_TYPE_I: chFrameType = 'I'; break;
+                case FRAME_TYPE_P: chFrameType = 'P'; break;
+                case FRAME_TYPE_B: chFrameType = 'B'; break;
+                }
+                cout << "[debug] pos=" << m_nCurPos << " nalu.type=" << nalu.type << " frame.type=" << chFrameType 
+                     << " nalu.size=" << nalu.size << endl;
 
                 m_nCurPos = nDelimiterPos;
                 return true;
