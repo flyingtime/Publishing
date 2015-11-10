@@ -52,7 +52,8 @@ public:
 
 protected:
         bool SendMetadata(RtmpMetadata * pMeta);
-        bool SendH264Packet(const char *data, unsigned int size, bool bIsKeyFrame, unsigned int nTimeStamp);
+        bool SendH264Packet(const char *data, unsigned int size, bool bIsKeyFrame,
+                            unsigned int nTimeStamp, unsigned int nCompositionTime = 0);
         bool ReadOneNaluFromBuf(NalUnit & nalu);
         bool GetNextNalUnit(unsigned int nStart, unsigned int &nDelimiter, unsigned int &nNalu);
         bool SendPacket(unsigned int nPacketType, const char *data, unsigned int size, unsigned int nTimestamp);

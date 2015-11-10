@@ -156,7 +156,7 @@ bool RtmpStream::SendMetadata(RtmpMetadata *_pMeta)
         return SendPacket(RTMP_PACKET_TYPE_VIDEO, (char *)body, i, 0);
 }
 
-bool RtmpStream::SendH264Packet(const char *_data, unsigned int _size, bool _bIsKeyFrame, unsigned int _nTimeStamp)
+bool RtmpStream::SendH264Packet(const char *_data, unsigned int _size, bool _bIsKeyFrame, unsigned int _nTimeStamp, unsigned int _nCompositionTime)
 {
         if (_data == nullptr && _size < 11) {
                 return false;
@@ -173,9 +173,9 @@ bool RtmpStream::SendH264Packet(const char *_data, unsigned int _size, bool _bIs
         body[i++] = 0x01; // AVC NALU
 
         // composition time adjustment
-        body[i++] = 0x00;
-        body[i++] = 0x00;
-        body[i++] = 0x00;
+        body[i++] = _nCompositionTime >> 16;
+        body[i++] = _nCompositionTime >> 8;
+        body[i++] = _nCompositionTime & 0xff;
 
         // NALU size
         body[i++] = _size >> 24;

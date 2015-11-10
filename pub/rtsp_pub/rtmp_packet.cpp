@@ -176,7 +176,7 @@ void RtmpPacketSender::Sei(const char *_pData, unsigned int _nLength)
         m_sei.data = m_seiData;
 }
 
-bool RtmpPacketSender::SendIdrOnly(const char *_pData, unsigned int _nLength)
+bool RtmpPacketSender::SendIdrOnly(const char *_pData, unsigned int _nLength, unsigned int _nCompositionTime)
 {
         m_nTimestamp += (1000 / m_nFps);
 
@@ -188,9 +188,9 @@ bool RtmpPacketSender::SendIdrOnly(const char *_pData, unsigned int _nLength)
                 // key frame
                 body[i++] = 0x17;
                 body[i++] = 0x01;
-                body[i++] = 0x00;
-                body[i++] = 0x00;
-                body[i++] = 0x00;
+                body[i++] = _nCompositionTime >> 16;
+                body[i++] = _nCompositionTime >> 8;
+                body[i++] = _nCompositionTime & 0xff;
 
                 i += WriteNalDataToBuffer(&body[i], _pData, _nLength);
                 m_queue.Push(RtmpPacket(body, i, m_nTimestamp));
@@ -199,7 +199,7 @@ bool RtmpPacketSender::SendIdrOnly(const char *_pData, unsigned int _nLength)
         }
 #endif
 
-        return SendH264Packet(_pData, _nLength, true, m_nTimestamp);
+        return SendH264Packet(_pData, _nLength, true, m_nTimestamp, _nCompositionTime);
 }
 
 bool RtmpPacketSender::SendConfig()
@@ -253,7 +253,7 @@ bool RtmpPacketSender::SendConfig()
 // Notice : Because we want to send SPS/PPS/SEI/IDR in one packet, this function almost re-writes the parent member
 //            'SendH264Packet()' and it will finally call 'SendPacket()' directly.
 //
-bool RtmpPacketSender::SendIdrAll(const char *_pData, unsigned int _nLength)
+bool RtmpPacketSender::SendIdrAll(const char *_pData, unsigned int _nLength, unsigned int _nCompositionTime)
 {
         // at least we have ever received SPS
         if (m_sps.size == 0) {
@@ -279,9 +279,9 @@ bool RtmpPacketSender::SendIdrAll(const char *_pData, unsigned int _nLength)
         body[i++] = 0x01; // AVC NALU
 
         // composition time adjustment
-        body[i++] = 0x00;
-        body[i++] = 0x00;
-        body[i++] = 0x00;
+        body[i++] = _nCompositionTime >> 16;
+        body[i++] = _nCompositionTime >> 8;
+        body[i++] = _nCompositionTime & 0xff;
 
         //
         // NAL Units (at most 4)
@@ -345,7 +345,7 @@ unsigned int RtmpPacketSender::WriteNalUnitToBuffer(char *_pBuffer, NalUnit *_pN
         return WriteNalDataToBuffer(_pBuffer, _pNalu->data, _pNalu->size);
 }
 
-bool RtmpPacketSender::SendNonIdr(const char *_pData, unsigned int _nLength)
+bool RtmpPacketSender::SendNonIdr(const char *_pData, unsigned int _nLength, unsigned int _nCompositionTime)
 {
         m_nTimestamp += (1000 / m_nFps);
 
@@ -357,9 +357,9 @@ bool RtmpPacketSender::SendNonIdr(const char *_pData, unsigned int _nLength)
                 // not a key frame
                 body[i++] = 0x27;
                 body[i++] = 0x01;
-                body[i++] = 0x00;
-                body[i++] = 0x00;
-                body[i++] = 0x00;
+                body[i++] = _nCompositionTime >> 16;
+                body[i++] = _nCompositionTime >> 8;
+                body[i++] = _nCompositionTime & 0xff;
 
                 i += WriteNalDataToBuffer(&body[i], _pData, _nLength);
                 m_queue.Push(RtmpPacket(body, i, m_nTimestamp));
@@ -368,7 +368,7 @@ bool RtmpPacketSender::SendNonIdr(const char *_pData, unsigned int _nLength)
         }
 #endif
 
-        return SendH264Packet(_pData, _nLength, false, m_nTimestamp);
+        return SendH264Packet(_pData, _nLength, false, m_nTimestamp, _nCompositionTime);
 }
 
 void RtmpPacketSender::SetStatus(RtmpPacketSenderStatusType _nStatus)

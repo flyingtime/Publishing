@@ -59,9 +59,9 @@ public:
         void Sps(const char *pData, unsigned int nLength);
         void Pps(const char *pData, unsigned int nLength);
         void Sei(const char *pData, unsigned int nLength);
-        bool SendIdrOnly(const char *pData, unsigned int nLength);
-        bool SendIdrAll(const char *pData, unsigned int nLength);
-        bool SendNonIdr(const char *pData, unsigned int nLength);
+        bool SendIdrOnly(const char *pData, unsigned int nLength, unsigned int nCompositionTime = 0);
+        bool SendIdrAll(const char *pData, unsigned int nLength, unsigned int nCompositionTime = 0);
+        bool SendNonIdr(const char *pData, unsigned int nLength, unsigned int nCompositionTime = 0);
         bool SendConfig();
 private:
         void ResetSps();
