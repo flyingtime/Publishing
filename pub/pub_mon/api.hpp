@@ -14,6 +14,7 @@
 #include <iostream>
 #include <vector>
 #include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
@@ -39,6 +40,8 @@ public:
         // RunCommand: when nSeconds == 0, that means no timeout
         static int RunCommand(const char *pCommand, unsigned int nSeconds = 0);
         static void MakeSleep(unsigned int nSeconds);
+        static void GetTime(string& _time);
+        static void PrintTime();
 
         // threads
 public:

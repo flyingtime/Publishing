@@ -95,6 +95,7 @@ void ProcEntry::Print()
 int ProcEntry::Run(unsigned int _nTimeout)
 {
         int nRetVal = OSIAPI::RunCommand(m_command.c_str(), _nTimeout);
+        OSIAPI::PrintTime();
         cout << "Process [" << m_command << "] terminated with exit code = " << nRetVal << endl;
         return nRetVal;
 }
@@ -279,6 +280,7 @@ OSIAPI_THREAD_RETURN_TYPE PubMonitor::MonitorThread(void *_pParam)
                         nExitCode = pEntry->Run(nTimeout);
                         if (nExitCode == RUNCMD_RV_WAIT_TIMEOUT) {
                                 nTimeoutReached++;
+                                OSIAPI::PrintTime();
                                 cout << "timeout #" << nTimeoutReached << ", sleep " << nInterval << " seconds ..." << endl;
                                 OSIAPI::MakeSleep(nInterval);
                                 continue;
@@ -288,13 +290,14 @@ OSIAPI_THREAD_RETURN_TYPE PubMonitor::MonitorThread(void *_pParam)
                 }
 
                 // check respawn policy
+                OSIAPI::PrintTime();
                 if (pEntry->CheckRespawn(nExitCode, nRetry, nInterval)) {
                         nRetry++;
-                        cout << "retry #" << nRetry << ", sleep " << nInterval << " seconds ..." << endl;
+                        cout << " retry #" << nRetry << ", sleep " << nInterval << " seconds ..." << endl;
                         OSIAPI::MakeSleep(nInterval);
                 } else {
                         // child threads exit here
-                        cout << "Process [" << *pEntry << "] is exiting, retry #" << nRetry << endl;
+                        cout << " Process [" << *pEntry << "] is exiting, retry #" << nRetry << endl;
                         break;
                 }
         }

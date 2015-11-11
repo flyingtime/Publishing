@@ -211,3 +211,21 @@ void OSIAPI::MakeSleep(unsigned int nSeconds)
         sleep(nSeconds);
 #endif
 }
+
+void OSIAPI::GetTime(string& _time)
+{
+        time_t nTimestamp;
+        struct tm *timeStruct;
+        char formatedTime[64];
+        nTimestamp = time(nullptr);
+        timeStruct = localtime(&nTimestamp);
+        strftime(formatedTime, 64, "%Y-%m-%d %H:%M:%S", timeStruct);
+        _time = formatedTime;
+}
+
+void OSIAPI::PrintTime()
+{
+        string time;
+        GetTime(time);
+        cout << "[" << time << "]";
+}
