@@ -193,20 +193,9 @@ bool RtmpStream::SendH264Packet(const char *_data, unsigned int _size, bool _bIs
 
 bool RtmpStream::SendH264File(const char *_pFileName)
 {
-        if (_pFileName == NULL) {
+        if (LoadFile(_pFileName) != true) {
                 return false;
         }
-        FILE *fp = fopen(_pFileName, "rb");
-        if (!fp) {
-                cout << "Error: could not open file" << endl;
-                return false;
-        }
-        fseek(fp, 0, SEEK_SET);
-        m_nFileBufSize = fread(m_pFileBuf, sizeof(char), FILE_BUFFER_SIZE, fp);
-        if (m_nFileBufSize >= FILE_BUFFER_SIZE) {
-                cout << "Warning: file is truncated" << endl;
-        }
-        fclose(fp);
 
         RtmpMetadata meta;
         memset(&meta, 0, sizeof(RtmpMetadata));
@@ -231,7 +220,7 @@ bool RtmpStream::SendH264File(const char *_pFileName)
         meta.nWidth = width;
         meta.nHeight = height;
         // TODO fps data from 264 stream
-        meta.nFrameRate = DEFAULT_FPS;
+        meta.nFrameRate = DEFAULT_H264_FPS;
         m_nFrameRate = meta.nFrameRate;
 
         cout << "[debug] width=" << width << " height=" << height << endl;
@@ -314,6 +303,188 @@ bool RtmpStream::ReadOneNaluFromBuf(NalUnit &nalu)
         }
         cout << "[debug] end of publish" << endl;
         return false;
+}
+
+bool RtmpStream::SendAdpcmPacket(const char *_pData, unsigned int _nSize, unsigned int _nTimeStamp)
+{
+        return SendAdpcmPacket(_pData, _nSize, _nTimeStamp, SOUND_RATE_44K, SOUND_SIZE_16BIT, SOUND_TYPE_STEREO);
+}
+
+bool RtmpStream::SendAdpcmPacket(const char *_pData, unsigned int _nSize, unsigned int _nTimeStamp,
+                                 char _chSoundRate, char _chSoundSize, char _chSoundType)
+{
+        char chHeader = 0;
+        chHeader |= _chSoundType & 0x01;
+        chHeader |= (_chSoundSize << 1) & 0x02;
+        chHeader |= (_chSoundRate << 2) & 0x0c;
+        chHeader |= (SOUND_FORMAT_ADPCM << 4) & 0xf0;
+
+        unsigned int nSize = _nSize + 1;
+        char *pData = new char[nSize]; // include header
+        char *p = pData;
+        *p++ = chHeader;
+        memcpy(p, _pData, _nSize);
+        bool bStatus = SendPacket(RTMP_PACKET_TYPE_AUDIO, pData, nSize, _nTimeStamp);
+        delete[] pData;
+        return bStatus;
+}
+
+bool RtmpStream::SendAacPacket(const char *_pData, unsigned int _nSize, unsigned int _nTimeStamp)
+{
+        return SendAacPacket(_pData, _nSize, _nTimeStamp, SOUND_RATE_44K, SOUND_SIZE_16BIT, SOUND_TYPE_STEREO);
+}
+
+bool RtmpStream::SendAacPacket(const char *_pData, unsigned int _nSize, unsigned int _nTimeStamp,
+                               char _chSoundRate, char _chSoundSize, char _chSoundType)
+{
+        // additional 2-byte audio spec config
+        char *body = new char[_nSize + 2];
+        unsigned int i = 0;
+
+        // decoder spec info bytes
+        body[0] |= _chSoundType & 0x01;
+        body[0] |= (_chSoundSize << 1) & 0x02;
+        body[0] |= (_chSoundRate << 2) & 0x0c;
+        body[0] |= (SOUND_FORMAT_AAC << 4) & 0xf0;
+        // this is a sequence header
+        body[1] = SOUND_AAC_TYPE_RAW;
+
+        // send aac frame
+        memcpy(&body[2], _pData, _nSize);
+        bool bStatus = SendPacket(RTMP_PACKET_TYPE_AUDIO, body, _nSize + 2, _nTimeStamp);
+        delete[] body;
+        return bStatus;
+}
+
+bool RtmpStream::SendAacConfig(char _chSoundRate, char _chSoundSize, char _chSoundType, const AdtsHeader *_pAdts)
+{
+        char body[4] = {0};
+
+        // decoder spec info bytes
+        body[0] |= _chSoundType & 0x01;
+        body[0] |= (_chSoundSize << 1) & 0x02;
+        body[0] |= (_chSoundRate << 2) & 0x0c;
+        body[0] |= (SOUND_FORMAT_AAC << 4) & 0xf0;
+        // this is a sequence header
+        body[1] = SOUND_AAC_TYPE_SEQ_HEADER;
+
+        // spec config bytes
+        char nProfile;
+        char nSfIndex;
+        char nChannel;
+        if (_pAdts != nullptr) {
+                nProfile = _pAdts->nProfile;
+                nSfIndex = _pAdts->nSfIndex;
+                nChannel = _pAdts->nChannelConfiguration;
+        } else {
+                nProfile = ASC_OBJTYPE_AAC_LC;
+                nSfIndex = ASC_SF_44100;
+                nChannel = ASC_CHAN_FLR;
+        }
+
+        unsigned int nAudioSpecConfig = 0;
+        nAudioSpecConfig |= ((nProfile << 11) & 0xf800);
+        nAudioSpecConfig |= ((nSfIndex << 7) & 0x0780);
+        nAudioSpecConfig |= ((nChannel << 3) & 0x78);
+        nAudioSpecConfig |= 0 & 0x7;
+        body[2] = (nAudioSpecConfig & 0xff00) >> 8;
+        body[3] = nAudioSpecConfig & 0xff;
+
+        return SendPacket(RTMP_PACKET_TYPE_AUDIO, body, sizeof(body), 0);
+}
+
+bool RtmpStream::SendAacFile(const char *_pFileName)
+{
+        if (LoadFile(_pFileName) != true) {
+                return false;
+        }
+
+        // first header
+        AdtsHeader adtsHeader;
+        if (GetAacHeader(m_pFileBuf, adtsHeader) == false) {
+                cout << "Error: AAC header not valid" << endl;
+                return false;
+        }
+
+        // send sequence header
+        if (SendAacConfig(SOUND_RATE_44K, SOUND_SIZE_16BIT, SOUND_TYPE_STEREO, &adtsHeader) == false) {
+                cout << "Error: AAC spec not sent" << endl;
+                return false;
+        }
+
+        // loop
+        unsigned int nTimestamp = 0, nRawAacSize, nAdtsHeaderSize;
+        m_nCurPos = 0;
+        m_nFrameRate = DEFAULT_AAC_FPS;
+        while (m_nCurPos < m_nFileBufSize) {
+                if (GetAacHeader(&m_pFileBuf[m_nCurPos], adtsHeader) == false) {
+                        return false;
+                }
+
+                nAdtsHeaderSize = (adtsHeader.nProtectionAbsent == 1 ? 7 : 9);
+                nRawAacSize = adtsHeader.nAacFrameLength - nAdtsHeaderSize;
+                m_nCurPos += nAdtsHeaderSize;
+                cout << "[debug] pos=" << m_nCurPos << " size=" << nRawAacSize << endl;
+
+                nTimestamp += 1000 / m_nFrameRate;
+                bool bStatus = SendAacPacket(&m_pFileBuf[m_nCurPos], nRawAacSize, nTimestamp);
+                if (bStatus == false) {
+                        cout << "[error] not sent" << endl;
+                }
+                m_nCurPos += nRawAacSize;
+
+                msleep(1000 / m_nFrameRate);
+        }
+
+        cout << "Info: AAC: end of publish" << endl;
+        return true;
+}
+
+bool RtmpStream::GetAacHeader(const char *_pBuffer, AdtsHeader &_header)
+{
+        // headers begin with FFFxxxxx...
+        if ((unsigned char)_pBuffer[0] == 0xff && (((unsigned char)_pBuffer[1] & 0xf0) == 0xf0)) {
+                _header.nSyncWord = (_pBuffer[0] << 4) | (_pBuffer[1] >> 4);
+                _header.nId = ((unsigned int)_pBuffer[1] & 0x08) >> 3;
+                _header.nLayer = ((unsigned int)_pBuffer[1] & 0x06) >> 1;
+                _header.nProtectionAbsent = (unsigned int)_pBuffer[1] & 0x01;
+                _header.nProfile = ((unsigned int)_pBuffer[2] & 0xc0) >> 6;
+                _header.nSfIndex = ((unsigned int)_pBuffer[2] & 0x3c) >> 2;
+                _header.nPrivateBit = ((unsigned int)_pBuffer[2] & 0x02) >> 1;
+                _header.nChannelConfiguration = ((((unsigned int)_pBuffer[2] & 0x01) << 2) | (((unsigned int)_pBuffer[3] & 0xc0) >> 6));
+                _header.nOriginal = ((unsigned int)_pBuffer[3] & 0x20) >> 5;
+                _header.nHome = ((unsigned int)_pBuffer[3] & 0x10) >> 4;
+                _header.nCopyrightIdentificationBit = ((unsigned int)_pBuffer[3] & 0x08) >> 3;
+                _header.nCopyrigthIdentificationStart = (unsigned int)_pBuffer[3] & 0x04 >> 2;
+                _header.nAacFrameLength = (((((unsigned int)_pBuffer[3]) & 0x03) << 11) |
+                                            (((unsigned int)_pBuffer[4] & 0xFF) << 3) |
+                                            ((unsigned int)_pBuffer[5] & 0xE0) >> 5);
+                _header.nAdtsBufferFullness = (((unsigned int)_pBuffer[5] & 0x1f) << 6 | ((unsigned int)_pBuffer[6] & 0xfc) >> 2);
+                _header.nNoRawDataBlocksInFrame = ((unsigned int)_pBuffer[6] & 0x03);
+                return true;
+        } else {
+                cout << "Warning: Wrong ADTS AAC header" << endl;
+                return false;
+        }
+}
+
+bool RtmpStream::LoadFile(const char *_pFileName)
+{
+        if (_pFileName == NULL) {
+                return false;
+        }
+        FILE *fp = fopen(_pFileName, "rb");
+        if (!fp) {
+                cout << "Error: could not open file" << endl;
+                return false;
+        }
+        fseek(fp, 0, SEEK_SET);
+        m_nFileBufSize = fread(m_pFileBuf, sizeof(char), FILE_BUFFER_SIZE, fp);
+        if (m_nFileBufSize >= FILE_BUFFER_SIZE) {
+                cout << "Warning: file is truncated" << endl;
+        }
+        fclose(fp);
+        return true;
 }
 
 void RtmpStream::PrintNalUnit(const NalUnit *_pNalu)
