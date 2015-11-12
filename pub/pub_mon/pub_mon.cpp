@@ -11,7 +11,8 @@ Policy ProcEntry::m_policy[] =
         { POLICY_RESPAWN_LIMITS,   "max_retry="},
         { POLICY_RESPAWN_FORCE,    "force="},
         { POLICY_TIMEOUT,          "tm="},
-        { POLICY_TIMEOUT_INTERVAL, "tm_int="}
+        { POLICY_TIMEOUT_INTERVAL, "tm_int="},
+        { POLICY_LOG_PATH,         "log="}
 };
 
 ostream& operator<< (ostream &_os, const ProcEntry& _entry)
@@ -92,9 +93,9 @@ void ProcEntry::Print()
         });
 }
 
-int ProcEntry::Run(unsigned int _nTimeout)
+int ProcEntry::Run(unsigned int _nTimeout, const char *_pRunLogPath)
 {
-        int nRetVal = OSIAPI::RunCommand(m_command.c_str(), _nTimeout);
+        int nRetVal = OSIAPI::RunCommand(m_command.c_str(), _nTimeout, _pRunLogPath);
         OSIAPI::PrintTime();
         cout << "Process [" << m_command << "] terminated with exit code = " << nRetVal << endl;
         return nRetVal;
@@ -157,6 +158,19 @@ bool ProcEntry::CheckRespawn(int _nExitCode, unsigned int _nRetry, unsigned int&
                 return false;
         }
         return bNeedRespawn;
+}
+
+const char* ProcEntry::CheckLogFile()
+{
+        static string tempString = "log.txt";
+        for (auto it = m_policyTable.begin(); it != m_policyTable.end(); it++) {
+                switch ((*it).second) {
+                case POLICY_LOG_PATH:
+                        return tempString.c_str();
+                        break;
+                }
+        }
+        return nullptr;
 }
 
 //
@@ -274,10 +288,11 @@ OSIAPI_THREAD_RETURN_TYPE PubMonitor::MonitorThread(void *_pParam)
         unsigned int nInterval = 0, nRetry = 0, nTimeout = 0, nTimeoutReached = 0;
         while (true) {
                 pEntry = (ProcEntry *)_pParam;
+                const char *pRunLog = pEntry->CheckLogFile();
 
                 // run command with timeout policy if needed
                 if (pEntry->CheckTimeout(nTimeout, nInterval) == true) {
-                        nExitCode = pEntry->Run(nTimeout);
+                        nExitCode = pEntry->Run(nTimeout, pRunLog);
                         if (nExitCode == RUNCMD_RV_WAIT_TIMEOUT) {
                                 nTimeoutReached++;
                                 OSIAPI::PrintTime();
@@ -286,7 +301,7 @@ OSIAPI_THREAD_RETURN_TYPE PubMonitor::MonitorThread(void *_pParam)
                                 continue;
                         }
                 } else {
-                        nExitCode = pEntry->Run();
+                        nExitCode = pEntry->Run(0, pRunLog);
                 }
 
                 // check respawn policy

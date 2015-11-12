@@ -15,7 +15,8 @@ typedef enum _PType {
         POLICY_RESPAWN_LIMITS,
         POLICY_RESPAWN_FORCE,
         POLICY_TIMEOUT,
-        POLICY_TIMEOUT_INTERVAL
+        POLICY_TIMEOUT_INTERVAL,
+        POLICY_LOG_PATH
 } PType;
 
 typedef struct _Policy
@@ -33,9 +34,10 @@ public:
         void AddPolicy(int nExitCode, unsigned int nPolicyId);
         void AddPolicy(const char *pPolicy);
         void Print();
-        int Run(unsigned int nTimeout = 0);
+        int Run(unsigned int nTimeout = 0, const char *pRunLogPath = nullptr);
         bool CheckRespawn(int nExitCode, unsigned int nRetry, unsigned int& nInterval);
         bool CheckTimeout(unsigned int& nTimeout, unsigned int& nTimeoutInterval);
+        const char *CheckLogFile();
         friend ostream& operator<< (ostream &os, const ProcEntry& entry);
 private:
         // policy strings

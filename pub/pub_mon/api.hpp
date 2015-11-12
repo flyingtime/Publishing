@@ -8,9 +8,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <cstring>
-#include <sstream>
 #endif
 
+#include <algorithm>
+#include <sstream>
 #include <iostream>
 #include <vector>
 #include <cstdlib>
@@ -24,6 +25,7 @@ using namespace std;
 #define RUNCMD_RV_WAIT_TIMEOUT     -201
 #define RUNCMD_RV_WAIT_FAILED      -202
 #define RUNCMD_RV_WAIT_UNCAUGHT    -203
+#define RUNCMD_RV_LOG_CREATE_FILE  -300
 
 #if defined(__WIN32__) || defined(_WIN32)
 typedef DWORD OSIAPI_THREAD_RETURN_TYPE;
@@ -38,10 +40,14 @@ class OSIAPI
 public:
         OSIAPI() = delete;
         // RunCommand: when nSeconds == 0, that means no timeout
-        static int RunCommand(const char *pCommand, unsigned int nSeconds = 0);
+        static int RunCommand(const char *pCommand, unsigned int nSeconds = 0, const char *pLogFilePath = nullptr);
         static void MakeSleep(unsigned int nSeconds);
-        static void GetTime(string& _time);
+
+        // utility functions
+        static time_t GetTime(string& time);
+        static time_t GetTime();
         static void PrintTime();
+        static string RandomString(unsigned int nLength);
 
         // threads
 public:

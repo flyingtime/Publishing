@@ -11,18 +11,61 @@
 
 #if defined(__WIN32__) || defined(_WIN32)
 
-int OSIAPI::RunCommand(const char *_pCommand, unsigned int _nSeconds)
+// windows only
+DWORD WriteTimestampToFile(HANDLE hFile)
+{
+        string text, timestamp;
+        string split = "--------------------";
+        DWORD dwBytesWritten;
+        OSIAPI::GetTime(timestamp);
+        text = "\r\n" + split + "\r\n" + timestamp + "\r\n" + split + "\r\n";
+        WriteFile(hFile, text.c_str(), text.size(), &dwBytesWritten, nullptr);
+        return dwBytesWritten;
+}
+
+int OSIAPI::RunCommand(const char *_pCommand, unsigned int _nSeconds, const char *_pLogFilePath)
 {
         int nRetVal = 0;
-
         STARTUPINFO si;
         PROCESS_INFORMATION pi;
         DWORD dwExitCode = 0;
-
         ZeroMemory(&si, sizeof(si));
         ZeroMemory(&pi, sizeof(pi));
 
-        BOOL bRetVal = CreateProcess(nullptr, (LPSTR)_pCommand, nullptr, nullptr, FALSE,
+        //
+        // create log file and redirect outputs of backend processes
+        //
+        HANDLE hConsoleRedirect;
+        if (_pLogFilePath != nullptr) {
+                SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
+                SECURITY_ATTRIBUTES *psa = nullptr;
+                DWORD dwShareModel = FILE_SHARE_READ | FILE_SHARE_WRITE;
+                OSVERSIONINFO osVersion = {0};
+                osVersion.dwOSVersionInfoSize = sizeof (osVersion);
+                if (GetVersionEx(&osVersion)) {
+                        if (osVersion.dwPlatformId == VER_PLATFORM_WIN32_NT) {
+                                psa = &sa;
+                                dwShareModel |= FILE_SHARE_DELETE;
+                        }
+                }
+                hConsoleRedirect = CreateFile(_pLogFilePath, GENERIC_WRITE, dwShareModel, psa,
+                                              OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                if (hConsoleRedirect == INVALID_HANDLE_VALUE) {
+                        return RUNCMD_RV_LOG_CREATE_FILE;
+                }
+                SetFilePointer(hConsoleRedirect, 0, nullptr, FILE_END);
+                WriteTimestampToFile(hConsoleRedirect);
+
+                // redirect outputs of children
+                si.dwFlags = STARTF_USESTDHANDLES;
+                si.hStdOutput = hConsoleRedirect;
+                si.hStdError = hConsoleRedirect;
+        }
+
+        //
+        // prepare to run command
+        //
+        BOOL bRetVal = CreateProcess(nullptr, (LPSTR)_pCommand, nullptr, nullptr, TRUE,
                                      NORMAL_PRIORITY_CLASS | CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
         if (bRetVal == true) {
                 DWORD dwMilliSeconds;
@@ -66,6 +109,12 @@ int OSIAPI::RunCommand(const char *_pCommand, unsigned int _nSeconds)
                 // failed to create a new process
                 nRetVal = RUNCMD_RV_CREATE_PROCESS;
         }
+
+        if (_pLogFilePath != nullptr) {
+                // close file handles
+                WriteTimestampToFile(hConsoleRedirect);
+                CloseHandle(hConsoleRedirect);
+        }
         return nRetVal;
 }
 
@@ -100,7 +149,7 @@ struct ParamSet
 
 #define DELIMITER_CHAR ' '
 #define MAX_ARGUMENT_NUMBER 32
-int OSIAPI::RunCommand(const char *_pCommand, unsigned int _nSeconds)
+int OSIAPI::RunCommand(const char *_pCommand, unsigned int _nSeconds,  const char *_pLogFilePath)
 {
         pid_t worker;
         worker = fork();
@@ -212,15 +261,23 @@ void OSIAPI::MakeSleep(unsigned int nSeconds)
 #endif
 }
 
-void OSIAPI::GetTime(string& _time)
+//
+// some utility functions
+//
+
+time_t OSIAPI::GetTime(string& _time)
 {
-        time_t nTimestamp;
-        struct tm *timeStruct;
+        time_t nTimestamp = GetTime();
+        struct tm *pTimeStruct = localtime(&nTimestamp);
         char formatedTime[64];
-        nTimestamp = time(nullptr);
-        timeStruct = localtime(&nTimestamp);
-        strftime(formatedTime, 64, "%Y-%m-%d %H:%M:%S", timeStruct);
+        strftime(formatedTime, 64, "%Y-%m-%d %H:%M:%S", pTimeStruct);
         _time = formatedTime;
+        return nTimestamp;
+}
+
+time_t OSIAPI::GetTime()
+{
+        return time(nullptr);
 }
 
 void OSIAPI::PrintTime()
@@ -228,4 +285,19 @@ void OSIAPI::PrintTime()
         string time;
         GetTime(time);
         cout << "[" << time << "]";
+}
+
+string OSIAPI::RandomString(unsigned int _nLength)
+{
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    unsigned int nStringLen = sizeof(alphabet) - 1;
+    char chRandomChar;
+    string result;
+    srand(time(nullptr));
+    for(unsigned int i = 0; i < _nLength; i++)
+    {
+        chRandomChar = alphabet[rand() % nStringLen];
+        result += chRandomChar;
+    }
+    return result;
 }
