@@ -31,7 +31,7 @@ class ProcEntry
 {
 public:
         ProcEntry(const char *pCommand);
-        void AddPolicy(int nExitCode, unsigned int nPolicyId);
+        void AddPolicy(unsigned int _nPolicyId, const string& _value);
         void AddPolicy(const char *pPolicy);
         void Print();
         int Run(unsigned int nTimeout = 0, const char *pRunLogPath = nullptr);
@@ -44,7 +44,7 @@ private:
         static Policy m_policy[];
 
         string m_command;
-        vector< pair<int, unsigned int> > m_policyTable;
+        vector< pair<unsigned int, string> > m_policyTable;
 };
 
 class PubMonitor

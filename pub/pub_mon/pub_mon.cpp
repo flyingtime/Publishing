@@ -35,9 +35,9 @@ ProcEntry::ProcEntry(const char *_pCommand):
         });
 }
 
-void ProcEntry::AddPolicy(int _nExitCode, unsigned int _nPolicyId)
+void ProcEntry::AddPolicy(unsigned int _nPolicyId, const string& _value)
 {
-        m_policyTable.push_back(make_pair(_nExitCode, _nPolicyId));
+        m_policyTable.push_back(make_pair(_nPolicyId, _value));
 }
 
 void ProcEntry::AddPolicy(const char *_pPolicy)
@@ -56,6 +56,7 @@ void ProcEntry::AddPolicy(const char *_pPolicy)
                         // find next space or tab character and get substring between '=' and '\t' or '\s'
                         nFoundPos = line.find(pPolicyOption, nFoundPos);
                         if (nFoundPos != string::npos) {
+                                // abc=<nStart>123<nEnd>;
                                 size_t nStart = nFoundPos + strlen(pPolicyOption);
                                 size_t nEnd = line.find(';', nFoundPos);
                                 nEnd = ((nEnd == string::npos) ? nLineSize - 1 : nEnd);
@@ -66,9 +67,9 @@ void ProcEntry::AddPolicy(const char *_pPolicy)
                                         continue;
                                 }
 
-                                int nExitCode;
+                                string value;
                                 try {
-                                        nExitCode = stoi(line.substr(nStart, nEnd - nStart));
+                                        value = line.substr(nStart, nEnd - nStart);
                                 } catch (exception &e) {
                                         cout << "Warning: exception caught: " << e.what() << endl;
                                         cout << "Warning: maybe invalid exit code, deprecated" << endl;
@@ -76,7 +77,7 @@ void ProcEntry::AddPolicy(const char *_pPolicy)
                                 }
                                 
                                 // get exit code
-                                AddPolicy(nExitCode, nPolicyType);
+                                AddPolicy(nPolicyType, value);
                         } else {
                                 break;
                         }
@@ -88,8 +89,8 @@ void ProcEntry::Print()
 {
         cout << "command: " << m_command << endl;
         cout << "policy : " << endl;
-        for_each(m_policyTable.begin(), m_policyTable.end(), [](const pair<int, unsigned int> policyPair) {
-                cout << " action:" << policyPair.second << "  value:" << policyPair.first << endl;
+        for_each(m_policyTable.begin(), m_policyTable.end(), [](const pair<unsigned int, string> policyPair) {
+                cout << " action:" << policyPair.first << "  value:" << policyPair.second << endl;
         });
 }
 
@@ -107,13 +108,13 @@ bool ProcEntry::CheckTimeout(unsigned int& _nTimeout, unsigned int& _nTimeoutInt
         _nTimeoutInterval = TIMEOUT_DEFAULT_SLEEP_INTERVAL; // default value for timeout case
 
         for (auto it = m_policyTable.begin(); it != m_policyTable.end(); it++) {
-                switch ((*it).second) {
+                switch ((*it).first) {
                 case POLICY_TIMEOUT:
-                        _nTimeout = static_cast<unsigned int>((*it).first);
+                        _nTimeout = static_cast<unsigned int>(atoi((*it).second.c_str()));
                         bIsValidTimeoutPolicy = true;
                         break;
                 case POLICY_TIMEOUT_INTERVAL:
-                        _nTimeoutInterval = static_cast<unsigned int>((*it).first);
+                        _nTimeoutInterval = static_cast<unsigned int>(atoi((*it).second.c_str()));
                         break;
                 default:
                         break;
@@ -131,17 +132,17 @@ bool ProcEntry::CheckRespawn(int _nExitCode, unsigned int _nRetry, unsigned int&
         _nInterval = RESPAWN_DEFAULT_INTERVAL;
 
         for (auto it = m_policyTable.begin(); it != m_policyTable.end(); it++) {
-                switch ((*it).second) {
+                switch ((*it).first) {
                 case POLICY_RESPAWN:
-                        if ((*it).first == _nExitCode) {
+                        if (atoi((*it).second.c_str()) == _nExitCode) {
                                 bNeedRespawn = true;
                         }
                         break;
                 case POLICY_RESPAWN_INTERVAL:
-                        _nInterval = static_cast<unsigned int>((*it).first);
+                        _nInterval = static_cast<unsigned int>(atoi((*it).second.c_str()));
                         break;
                 case POLICY_RESPAWN_LIMITS:
-                        if (_nRetry >= static_cast<unsigned int>((*it).first)) {
+                        if (_nRetry >= static_cast<unsigned int>(atoi((*it).second.c_str()))) {
                                 bReachMaxRetry = true;
                         }
                         break;
@@ -162,11 +163,10 @@ bool ProcEntry::CheckRespawn(int _nExitCode, unsigned int _nRetry, unsigned int&
 
 const char* ProcEntry::CheckLogFile()
 {
-        static string tempString = "log.txt";
         for (auto it = m_policyTable.begin(); it != m_policyTable.end(); it++) {
-                switch ((*it).second) {
+                switch ((*it).first) {
                 case POLICY_LOG_PATH:
-                        return tempString.c_str();
+                        return (*it).second.c_str();
                         break;
                 }
         }
